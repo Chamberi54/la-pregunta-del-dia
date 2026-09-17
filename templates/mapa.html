@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Mapa - La Pregunta del Dia{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
+{% block content %}
+<section class="results-panel results-panel-full">
+    <div class="results-header">
+        <div>
+            <h1>Mapa de resultados</h1>
+            {% if question %}
+            <p class="total-votes">{{ question['option_a'] }} vs {{ question['option_b'] }} &middot; {{ parse_date_label(selected_date) }}</p>
+            {% endif %}
+        </div>
+        {% if available_dates %}
+        <select id="date-select" class="date-select" onchange="window.location.href = '{{ url_for('mapa') }}?date=' + this.value">
+            {% for d in available_dates %}
+            <option value="{{ d }}" {{ 'selected' if d == selected_date else '' }}>{{ parse_date_label(d) }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </div>
+    {% if not question %}
+    <p class="fine-print">No hay pregunta para esa fecha.</p>
+    {% else %}
+    <div id="total-votes-label" class="total-votes"></div>
+    <div id="totals-bar" class="totals-bar"></div>
+    <div class="map-view-row">
+        <label for="map-view-select">Ver por:</label>
+        <select id="map-view-select" class="date-select">
+            <option value="ciudades">Ciudades</option>
+            <option value="comunidades">Comunidades</option>
+        </select>
+    </div>
+    <div id="map"></div>
+    <div class="legend">
+        <span><i class="dot dot-a"></i> Mas {{ question['option_a'] }}</span>
+        <span><i class="dot dot-b"></i> Mas {{ question['option_b'] }}</span>
+        <span id="legend-none"><i class="dot dot-none"></i> Sin votos</span>
+    </div>
+    <h3 class="city-results-title">Resultados por ciudad</h3>
+    <div id="city-results-grid" class="city-results-grid"></div>
+    {% endif %}
+</section>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/spain-map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/results.js') }}"></script>
+{% endblock %}

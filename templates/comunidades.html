@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Comunidades - La Pregunta del Dia{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
+{% block content %}
+<section class="results-panel results-panel-full">
+    <div class="results-header">
+        <div>
+            <h1>Resultados por Comunidad Autonoma</h1>
+            {% if question %}
+            <p class="total-votes">{{ question['option_a'] }} vs {{ question['option_b'] }} &middot; {{ parse_date_label(selected_date) }}</p>
+            {% endif %}
+        </div>
+        {% if available_dates %}
+        <select id="date-select" class="date-select" onchange="window.location.href = '{{ url_for('comunidades') }}?date=' + this.value">
+            {% for d in available_dates %}
+            <option value="{{ d }}" {{ 'selected' if d == selected_date else '' }}>{{ parse_date_label(d) }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </div>
+
+    {% if not question %}
+    <p class="fine-print">No hay pregunta para esa fecha.</p>
+    {% else %}
+    <div id="totals-bar" class="totals-bar"></div>
+    <p class="fine-print ca-map-hint">Toca una comunidad del mapa para ver su resultado</p>
+    <div id="map"></div>
+    <div class="legend">
+        <span><i class="dot dot-a"></i> Mas {{ question['option_a'] }}</span>
+        <span><i class="dot dot-b"></i> Mas {{ question['option_b'] }}</span>
+        <span><i class="dot dot-none"></i> Sin votos</span>
+    </div>
+    <div id="ca-list" class="ca-list"></div>
+    {% endif %}
+</section>
+<script id="ca-images-data" type="application/json">{{ ca_images | tojson }}</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/spain-map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/comunidades.js') }}" data-date="{{ selected_date }}"></script>
+{% endblock %}

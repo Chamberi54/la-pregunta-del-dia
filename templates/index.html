@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}La Pregunta del Dia{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+{% endblock %}
+{% block content %}
+<div class="dashboard">
+    <section class="vote-card">
+        {% if not question %}
+        <div class="empty-state">
+            <h1>Hoy todavia no hay pregunta</h1>
+            <p>Vuelve mas tarde, el administrador aun no ha lanzado la pregunta del dia.</p>
+        </div>
+        {% else %}
+        <p class="today-date">{{ today_label }}</p>
+        <span class="badge">La pregunta de hoy</span>
+        <h1 class="question-heading">
+            <span class="option-a-text">{{ question['option_a'] }}</span>
+            <span class="vs-text">o</span>
+            <span class="option-b-text">{{ question['option_b'] }}</span>?
+        </h1>
+
+        {% if question['has_image'] %}
+        <img class="question-image"
+             src="{{ url_for('question_image', question_id=question['id']) }}"
+             alt="{{ question['option_a'] }} vs {{ question['option_b'] }}">
+        {% endif %}
+
+        {% if already_voted %}
+        <div class="voted-state">
+            <p>Ya has votado hoy. Gracias por participar.</p>
+        </div>
+        {% else %}
+        <form id="vote-form">
+            <div class="choices">
+                <button type="button" class="choice-btn choice-a" data-choice="A">Voto {{ question['option_a'] }}</button>
+                <button type="button" class="choice-btn choice-b" data-choice="B">Voto {{ question['option_b'] }}</button>
+            </div>
+
+            <label for="city-input">Tu ubicacion</label>
+            <select id="city-input" name="city" required>
+                <option value="" disabled selected>Elige tu ciudad o pueblo</option>
+                {% for city in city_names %}
+                <option value="{{ city }}">{{ city }}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit" class="cta-button" id="submit-vote">Votar ahora!</button>
+            <p id="vote-error" class="error"></p>
+            <p class="fine-print">Tu voto es anonimo y solo se usa para estadisticas.</p>
+        </form>
+        {% endif %}
+        {% endif %}
+    </section>
+
+    <section class="results-panel">
+        <div class="results-header">
+            <div>
+                <h2>Asi vota Espana</h2>
+                <p id="total-votes-label" class="total-votes"></p>
+            </div>
+            <div class="results-actions">
+                <input type="search" id="city-search" placeholder="Busca tu ciudad...">
+                <button type="button" id="share-button" class="share-button">Compartir resultado</button>
+            </div>
+        </div>
+        <div id="totals-bar" class="totals-bar"></div>
+        <div class="map-view-row">
+            <label for="map-view-select">Ver por:</label>
+            <select id="map-view-select" class="date-select">
+                <option value="ciudades">Ciudades</option>
+                <option value="comunidades">Comunidades</option>
+            </select>
+        </div>
+        <div id="map"></div>
+        <div class="legend">
+            <span><i class="dot dot-a"></i> Mas {{ question['option_a'] if question else 'A' }}</span>
+            <span><i class="dot dot-b"></i> Mas {{ question['option_b'] if question else 'B' }}</span>
+            <span id="legend-none"><i class="dot dot-none"></i> Sin votos</span>
+        </div>
+    </section>
+</div>
+
+{% if recent_questions %}
+<section class="carousel-section">
+    <h3 class="city-results-title">Ultimas preguntas</h3>
+    <div class="carousel">
+        {% for q in recent_questions %}
+        {% set total = q['votes_a'] + q['votes_b'] %}
+        {% set pct_a = (q['votes_a'] * 100 // total) if total else 50 %}
+        <a class="carousel-card" href="{{ url_for('mapa', date=q['question_date']) }}">
+            <p class="carousel-date">{{ parse_date_label(q['question_date']) }}</p>
+            <p class="carousel-question">{{ q['option_a'] }} <span class="vs-text">o</span> {{ q['option_b'] }}</p>
+            <div class="split-bar">
+                <div class="part-a" style="width:{{ pct_a }}%"></div>
+                <div class="part-b" style="width:{{ 100 - pct_a }}%"></div>
+            </div>
+            <div class="split-labels"><span>{{ pct_a }}%</span><span>{{ 100 - pct_a }}%</span></div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/vote.js') }}"></script>
+<script src="{{ url_for('static', filename='js/spain-map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/results.js') }}"></script>
+{% endblock %}

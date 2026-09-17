@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Propuestas - La Pregunta del Dia{% endblock %}
+{% block content %}
+<section class="card narrow">
+    <h1>Propon una pregunta</h1>
+    <p class="fine-print">Escribe las dos opciones. Las mas votadas tienen mas papeletas de salir como pregunta del dia.</p>
+    {% for message in get_flashed_messages() %}<p class="error">{{ message }}</p>{% endfor %}
+    <form method="post">
+        <label for="option_a">Opcion A</label>
+        <input type="text" id="option_a" name="option_a" maxlength="60" required>
+
+        <label for="option_b">Opcion B</label>
+        <input type="text" id="option_b" name="option_b" maxlength="60" required>
+
+        <button type="submit" class="button">Proponer</button>
+    </form>
+</section>
+
+<section class="results-panel results-panel-full">
+    <h2>Propuestas de la gente</h2>
+    {% if not proposals %}
+    <p class="fine-print">Todavia no hay propuestas. Se el primero en proponer una.</p>
+    {% endif %}
+    <div class="proposal-list">
+        {% for p in proposals %}
+        <div class="proposal-row" data-proposal-id="{{ p['id'] }}">
+            <div class="proposal-question">{{ p['option_a'] }} <span class="vs-text">vs</span> {{ p['option_b'] }}</div>
+            <button type="button" class="vote-proposal-btn {{ 'voted' if p['id'] in voted_ids else '' }}"
+                    {{ 'disabled' if p['id'] in voted_ids else '' }}>
+                <span class="vote-count">{{ p['votes'] }}</span>
+                <span class="vote-label">{{ 'Votado' if p['id'] in voted_ids else 'Votar' }}</span>
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+<script src="{{ url_for('static', filename='js/propuestas.js') }}"></script>
+{% endblock %}

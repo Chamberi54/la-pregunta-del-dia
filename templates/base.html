@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}La Pregunta del Dia{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-top">
+            <a class="brand" href="{{ url_for('index') }}">
+                <span class="brand-line">LA PREGUNTA</span>
+                <span class="brand-line brand-accent">DEL DIA</span>
+            </a>
+        </div>
+        <nav class="main-nav">
+            <a href="{{ url_for('index') }}" class="{{ 'active' if active_page == 'hoy' else '' }}">Hoy</a>
+            <a href="{{ url_for('historico') }}" class="{{ 'active' if active_page == 'historico' else '' }}">Historico</a>
+            <a href="{{ url_for('mapa') }}" class="{{ 'active' if active_page == 'mapa' else '' }}">Mapa</a>
+            <a href="{{ url_for('comunidades') }}" class="{{ 'active' if active_page == 'comunidades' else '' }}">Comunidades</a>
+            <a href="{{ url_for('propuestas') }}" class="{{ 'active' if active_page == 'propuestas' else '' }}">Propuestas</a>
+            <a href="{{ url_for('sobre_el_proyecto') }}" class="{{ 'active' if active_page == 'sobre' else '' }}">¿Por qué hacemos esto?</a>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

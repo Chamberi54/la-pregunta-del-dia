@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Admin - La Pregunta del Dia{% endblock %}
+{% block content %}
+<div class="card narrow">
+    <h1>Pregunta del dia</h1>
+    {% for message in get_flashed_messages() %}<p class="success">{{ message }}</p>{% endfor %}
+    {% if question %}
+    <p>Pregunta activa hoy: <strong>{{ question['option_a'] }}</strong> vs <strong>{{ question['option_b'] }}</strong></p>
+    {% if question['has_image'] %}
+    <img class="admin-preview" src="{{ url_for('question_image', question_id=question['id']) }}" alt="Imagen actual">
+    {% endif %}
+    {% endif %}
+    <form method="post" enctype="multipart/form-data">
+        <label for="option_a">Opcion A</label>
+        <input type="text" id="option_a" name="option_a" value="{{ question['option_a'] if question else '' }}" required>
+
+        <label for="option_b">Opcion B</label>
+        <input type="text" id="option_b" name="option_b" value="{{ question['option_b'] if question else '' }}" required>
+
+        <label for="image">Imagen (opcional)</label>
+        <input type="file" id="image" name="image" accept="image/png,image/jpeg,image/webp,image/gif">
+
+        <button type="submit" class="button">Guardar pregunta de hoy</button>
+    </form>
+    <p><a href="{{ url_for('admin_logout') }}">Cerrar sesion</a></p>
+</div>
+
+<div class="card narrow">
+    <h2>Propuestas de la gente</h2>
+    {% if not proposals %}
+    <p class="fine-print">Todavia no hay propuestas pendientes.</p>
+    {% endif %}
+    <div class="proposal-list">
+        {% for p in proposals %}
+        <div class="proposal-row">
+            <div class="proposal-question">
+                {{ p['option_a'] }} <span class="vs-text">vs</span> {{ p['option_b'] }}
+                <span class="fine-print">{{ p['votes'] }} voto{{ 's' if p['votes'] != 1 else '' }}</span>
+            </div>
+            <form method="post" action="{{ url_for('usar_propuesta', proposal_id=p['id']) }}">
+                <button type="submit" class="button historico-link">Usar hoy</button>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
