@@ -1,17 +1,23 @@
+import io
 import os
+import sqlite3
 import uuid
 from datetime import date, datetime
 from functools import wraps
 
 import psycopg
 from psycopg.rows import dict_row
-from psycopg.errors import UniqueViolation
+from psycopg.errors import UniqueViolation as PgUniqueViolation
 from flask import (
     Flask, g, render_template, request, redirect, url_for, session,
     jsonify, make_response, flash, Response, abort,
 )
 
 from cities import CITIES, CA_IMAGES
+from share_image import generate_share_image
+
+# Errores de "voto duplicado" que puede lanzar cualquiera de los dos backends.
+UniqueViolation = (PgUniqueViolation, sqlite3.IntegrityError)
 
 WEEKDAYS_ES = ["Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo"]
 MONTHS_ES = [
@@ -28,6 +34,8 @@ def parse_date_label(date_str):
     return spanish_date_label(datetime.strptime(date_str, "%Y-%m-%d").date())
 
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCAL_DB_PATH = os.path.join(BASE_DIR, "espana_dice.db")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 ALLOWED_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp", "gif"}
 MIMETYPES = {
@@ -42,13 +50,38 @@ ADMIN_PASSWORD = os.environ.get("ESPANA_DICE_ADMIN_PASSWORD", "admin123")
 app.jinja_env.globals["parse_date_label"] = parse_date_label
 
 
+class DBConn:
+    """Envoltorio fino que deja usar Postgres (psycopg) o SQLite local con el
+    mismo codigo: traduce los placeholders %s -> ? cuando hace falta."""
+
+    def __init__(self, conn, is_sqlite):
+        self._conn = conn
+        self.is_sqlite = is_sqlite
+
+    def execute(self, query, params=()):
+        if self.is_sqlite:
+            query = query.replace("%s", "?")
+        return self._conn.execute(query, params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+
 def get_db():
     if "db" not in g:
-        if not DATABASE_URL:
-            raise RuntimeError(
-                "Falta la variable de entorno DATABASE_URL (cadena de conexion a Postgres)."
-            )
-        g.db = psycopg.connect(DATABASE_URL, row_factory=dict_row, autocommit=False)
+        if DATABASE_URL:
+            conn = psycopg.connect(DATABASE_URL, row_factory=dict_row, autocommit=False)
+            g.db = DBConn(conn, is_sqlite=False)
+        else:
+            conn = sqlite3.connect(LOCAL_DB_PATH)
+            conn.row_factory = sqlite3.Row
+            g.db = DBConn(conn, is_sqlite=True)
     return g.db
 
 
@@ -60,53 +93,66 @@ def close_db(exception=None):
 
 
 def init_db():
-    db = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    if DATABASE_URL:
+        raw = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        id_col = "id SERIAL PRIMARY KEY"
+        blob_type = "BYTEA"
+        used_col = "used BOOLEAN NOT NULL DEFAULT FALSE"
+        ts_type = "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+    else:
+        raw = sqlite3.connect(LOCAL_DB_PATH)
+        id_col = "id INTEGER PRIMARY KEY AUTOINCREMENT"
+        blob_type = "BLOB"
+        used_col = "used INTEGER NOT NULL DEFAULT 0"
+        ts_type = "TEXT DEFAULT CURRENT_TIMESTAMP"
+
+    db = DBConn(raw, is_sqlite=not DATABASE_URL)
     db.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS questions (
-            id SERIAL PRIMARY KEY,
+            {id_col},
             question_date TEXT UNIQUE NOT NULL,
             option_a TEXT NOT NULL,
             option_b TEXT NOT NULL,
-            image_data BYTEA,
+            image_data {blob_type},
             image_mimetype TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at {ts_type}
         )
         """
     )
     db.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS votes (
-            id SERIAL PRIMARY KEY,
+            {id_col},
             question_id INTEGER NOT NULL REFERENCES questions(id),
             device_id TEXT NOT NULL,
             city TEXT NOT NULL,
             lat REAL NOT NULL,
             lon REAL NOT NULL,
             choice TEXT NOT NULL CHECK (choice IN ('A', 'B')),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at {ts_type},
             UNIQUE (question_id, device_id)
         )
         """
     )
     db.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS proposals (
-            id SERIAL PRIMARY KEY,
+            {id_col},
             option_a TEXT NOT NULL,
             option_b TEXT NOT NULL,
-            used BOOLEAN NOT NULL DEFAULT FALSE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            {used_col},
+            created_at {ts_type}
         )
         """
     )
     db.execute(
-        """
+        f"""
         CREATE TABLE IF NOT EXISTS proposal_votes (
-            id SERIAL PRIMARY KEY,
+            {id_col},
             proposal_id INTEGER NOT NULL REFERENCES proposals(id),
             device_id TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_at {ts_type},
             UNIQUE (proposal_id, device_id)
         )
         """
@@ -477,6 +523,42 @@ def question_image(question_id):
     return Response(bytes(row["image_data"]), mimetype=row["image_mimetype"] or "image/jpeg")
 
 
+@app.route("/share-image.png")
+def share_image_route():
+    db = get_db()
+    selected_date = request.args.get("date", date.today().isoformat())
+    question = get_question_by_date(db, selected_date)
+    if not question:
+        abort(404)
+
+    rows = db.execute(
+        "SELECT choice, COUNT(*) as c FROM votes WHERE question_id = %s GROUP BY choice",
+        (question["id"],),
+    ).fetchall()
+    totals = {"A": 0, "B": 0}
+    for row in rows:
+        totals[row["choice"]] = row["c"]
+    total_votes = totals["A"] + totals["B"]
+    pct_a = round(totals["A"] / total_votes * 100) if total_votes else 50
+    pct_b = 100 - pct_a
+
+    img = generate_share_image(
+        question["option_a"],
+        question["option_b"],
+        pct_a,
+        pct_b,
+        total_votes,
+        date_label=spanish_date_label(datetime.strptime(selected_date, "%Y-%m-%d").date()),
+    )
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    return Response(
+        buffer.getvalue(),
+        mimetype="image/png",
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
     error = None
@@ -569,8 +651,7 @@ def usar_propuesta(proposal_id):
     return redirect(url_for("admin"))
 
 
-if DATABASE_URL:
-    init_db()
+init_db()
 
 
 if __name__ == "__main__":

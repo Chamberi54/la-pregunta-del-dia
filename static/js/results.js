@@ -269,6 +269,20 @@
                 "Hoy Espana vota: " + pctA + "% " + lastQuestion.option_a +
                 " vs " + pctB + "% " + lastQuestion.option_b +
                 " en La Pregunta del Dia";
+            const imageUrl = "/share-image.png" + (lastQuestion.date ? "?date=" + encodeURIComponent(lastQuestion.date) : "");
+
+            try {
+                const imgResp = await fetch(imageUrl);
+                const blob = await imgResp.blob();
+                const file = new File([blob], "resultado.png", { type: "image/png" });
+
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], text: text, url: window.location.href });
+                    return;
+                }
+            } catch (err) {
+                // sigue a los siguientes metodos si falla la carga/comparticion de la imagen
+            }
 
             if (navigator.share) {
                 try {
@@ -279,12 +293,20 @@
                 }
             }
 
+            const link = document.createElement("a");
+            link.href = imageUrl;
+            link.download = "resultado.png";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+
             try {
                 await navigator.clipboard.writeText(text + " - " + window.location.href);
-                shareBtn.textContent = "Copiado!";
-                setTimeout(() => { shareBtn.textContent = "Compartir resultado"; }, 2000);
+                shareBtn.textContent = "Imagen descargada y texto copiado!";
+                setTimeout(() => { shareBtn.textContent = "Compartir resultado"; }, 2500);
             } catch (err) {
-                shareBtn.textContent = "No se pudo copiar";
+                shareBtn.textContent = "Imagen descargada";
+                setTimeout(() => { shareBtn.textContent = "Compartir resultado"; }, 2500);
             }
         });
     }
